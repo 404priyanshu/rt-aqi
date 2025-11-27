@@ -221,10 +221,12 @@ class AQIMLPipeline:
                 )
                 metrics["cv_mean"] = float(cv_scores.mean())
                 metrics["cv_std"] = float(cv_scores.std())
+                metrics["cv_performed"] = True
             except ValueError as e:
                 print(f"  Cross-validation failed for {name}: {e}")
-                metrics["cv_mean"] = metrics["accuracy"]
-                metrics["cv_std"] = 0.0
+                metrics["cv_mean"] = None
+                metrics["cv_std"] = None
+                metrics["cv_performed"] = False
             
             results[name] = metrics
             self.model_metrics[name] = metrics
@@ -436,7 +438,8 @@ class AQIMLPipeline:
                 "recall": metrics.get("recall", 0),
                 "f1_score": metrics.get("f1_score", 0),
                 "roc_auc": metrics.get("roc_auc"),
-                "cv_mean": metrics.get("cv_mean", 0),
+                "cv_mean": metrics.get("cv_mean"),
+                "cv_performed": metrics.get("cv_performed", True),
                 "is_best": name == self.best_model_name
             })
         

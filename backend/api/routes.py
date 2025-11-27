@@ -341,7 +341,7 @@ async def train_from_csv(
     
     Column names are automatically mapped to the expected format.
     """
-    # Validate file type
+    # Validate file type by extension
     if not file.filename or not file.filename.endswith('.csv'):
         raise HTTPException(
             status_code=400,
@@ -351,7 +351,15 @@ async def train_from_csv(
     try:
         # Read CSV file
         contents = await file.read()
-        df = pd.read_csv(io.StringIO(contents.decode('utf-8')))
+        
+        # Validate content by attempting to parse as CSV
+        try:
+            df = pd.read_csv(io.StringIO(contents.decode('utf-8')))
+        except (UnicodeDecodeError, pd.errors.ParserError) as e:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid CSV file content. Unable to parse the file."
+            )
         
         # Apply column name mapping
         df = map_csv_columns(df)
