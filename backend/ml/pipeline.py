@@ -49,8 +49,6 @@ class AQIMLPipeline:
         
         self.scaler = StandardScaler()
         self.label_encoder = LabelEncoder()
-        # Will be fitted on actual data during preprocessing
-        self._categories_fitted = False
         
         # Initialize classifiers
         self.classifiers = {
@@ -58,7 +56,7 @@ class AQIMLPipeline:
             "Decision Tree": DecisionTreeClassifier(random_state=42),
             "Random Forest": RandomForestClassifier(n_estimators=100, random_state=42),
             "Gradient Boosting": GradientBoostingClassifier(n_estimators=100, random_state=42),
-            "XGBoost": XGBClassifier(n_estimators=100, random_state=42, eval_metric='mlogloss', use_label_encoder=False)
+            "XGBoost": XGBClassifier(n_estimators=100, random_state=42, eval_metric='mlogloss')
         }
         
         self.trained_models = {}
@@ -96,7 +94,6 @@ class AQIMLPipeline:
             # Fit label encoder on actual data to ensure contiguous labels
             unique_categories = sorted(set(y_raw))
             self.label_encoder.fit(unique_categories)
-            self._categories_fitted = True
             y = self.label_encoder.transform(y_raw)
         else:
             # If no category, calculate from AQI

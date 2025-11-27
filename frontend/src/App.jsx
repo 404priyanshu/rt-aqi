@@ -5,8 +5,10 @@ import {
   BarChart, Bar, PieChart, Pie, Cell
 } from 'recharts';
 
-// API Base URL
+// Configuration
 const API_BASE = import.meta.env.VITE_API_URL || '/api';
+const POLLING_INTERVAL = parseInt(import.meta.env.VITE_POLLING_INTERVAL || '60000', 10);
+const TRAINING_REFRESH_DELAY = parseInt(import.meta.env.VITE_TRAINING_REFRESH_DELAY || '30000', 10);
 
 // AQI Category Colors
 const AQI_COLORS = {
@@ -272,7 +274,7 @@ function App() {
       const response = await axios.post(`${API_BASE}/models/train`);
       setTrainingStatus(response.data.message);
       // Refresh comparison after a delay
-      setTimeout(fetchModelComparison, 30000);
+      setTimeout(fetchModelComparison, TRAINING_REFRESH_DELAY);
     } catch (error) {
       setTrainingStatus('Training failed: ' + error.message);
     }
@@ -311,8 +313,8 @@ function App() {
     
     fetchAll();
     
-    // Poll for new data every 60 seconds
-    const interval = setInterval(fetchCurrentAQI, 60000);
+    // Poll for new data using configured interval
+    const interval = setInterval(fetchCurrentAQI, POLLING_INTERVAL);
     return () => clearInterval(interval);
   }, [fetchCurrentAQI, fetchTrends, fetchModelComparison]);
   

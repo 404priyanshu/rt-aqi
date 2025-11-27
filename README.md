@@ -334,12 +334,20 @@ docker-compose up -d
 
 ### Environment Variables
 
+#### Backend
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `PORT` | Backend server port | 8000 |
 | `DATABASE_URL` | SQLite database path | `sqlite:///./data/aqi_data.db` |
-| `FETCH_INTERVAL_MINUTES` | Data fetch interval | 15 |
-| `VITE_API_URL` | Frontend API URL | `/api` |
+| `FETCH_INTERVAL_MINUTES` | Data fetch interval in minutes | 15 |
+| `CORS_ORIGINS` | Allowed CORS origins (comma-separated) | `http://localhost:3000,http://localhost:5173` |
+
+#### Frontend
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `VITE_API_URL` | Backend API URL | `/api` |
+| `VITE_POLLING_INTERVAL` | Data polling interval in milliseconds | 60000 |
+| `VITE_TRAINING_REFRESH_DELAY` | Delay to refresh after training in milliseconds | 30000 |
 
 ### Model Retraining
 
