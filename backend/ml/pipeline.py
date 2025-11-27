@@ -75,8 +75,13 @@ class AQIMLPipeline:
         Returns:
             Tuple of (features, labels) as numpy arrays
         """
+        from backend.utils.helpers import map_csv_columns
+        
         # Handle missing values
         df = data.copy()
+        
+        # Apply column name mapping for flexibility
+        df = map_csv_columns(df)
         
         # Fill missing values with median
         for col in self.FEATURE_COLS:
@@ -126,7 +131,8 @@ class AQIMLPipeline:
         return self.label_encoder.transform(categories)
     
     def train_all_models(self, X: np.ndarray, y: np.ndarray, 
-                         test_size: float = 0.2) -> Dict[str, Dict[str, Any]]:
+                         test_size: float = 0.2,
+                         min_samples: int = 50) -> Dict[str, Dict[str, Any]]:
         """
         Train all classifiers and evaluate their performance.
         
@@ -134,16 +140,61 @@ class AQIMLPipeline:
             X: Feature matrix
             y: Target labels
             test_size: Proportion of data for testing
+            min_samples: Minimum number of samples required for training
             
         Returns:
             Dictionary with model metrics
+            
+        Raises:
+            ValueError: If there are not enough samples for training
         """
+        import warnings
+        from collections import Counter
+        
+        # Validate minimum sample count
+        n_samples = len(y)
+        if n_samples < min_samples:
+            raise ValueError(
+                f"Insufficient data for training. Got {n_samples} samples, "
+                f"but minimum required is {min_samples}. "
+                "Please provide more training data."
+            )
+        
+        # Check class distribution for stratification
+        class_counts = Counter(y)
+        min_class_count = min(class_counts.values())
+        n_classes = len(class_counts)
+        
+        # Determine if we can use stratification
+        # Need at least 2 samples per class for stratified split
+        use_stratify = min_class_count >= 2
+        
+        if not use_stratify:
+            warnings.warn(
+                f"Some classes have only 1 sample. Falling back to non-stratified "
+                f"split. Class distribution: {dict(class_counts)}",
+                UserWarning
+            )
+            print(f"Warning: Using non-stratified split due to class imbalance")
+        
         # Split data
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=test_size, random_state=42, stratify=y
-        )
+        try:
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=test_size, random_state=42, 
+                stratify=y if use_stratify else None
+            )
+        except ValueError as e:
+            # Fallback if stratification still fails
+            print(f"Stratification failed: {e}. Using non-stratified split.")
+            X_train, X_test, y_train, y_test = train_test_split(
+                X, y, test_size=test_size, random_state=42
+            )
         
         results = {}
+        
+        # Determine appropriate CV folds based on data size and class distribution
+        cv_folds = min(5, min_class_count) if min_class_count >= 2 else 2
+        cv_folds = max(2, cv_folds)  # At least 2-fold CV
         
         for name, classifier in self.classifiers.items():
             print(f"Training {name}...")
@@ -163,10 +214,17 @@ class AQIMLPipeline:
             # Calculate metrics
             metrics = self._calculate_metrics(y_test, y_pred, y_pred_proba)
             
-            # Cross-validation score
-            cv_scores = cross_val_score(classifier, X, y, cv=5, scoring='accuracy')
-            metrics["cv_mean"] = float(cv_scores.mean())
-            metrics["cv_std"] = float(cv_scores.std())
+            # Cross-validation score with appropriate folds
+            try:
+                cv_scores = cross_val_score(
+                    classifier, X, y, cv=cv_folds, scoring='accuracy'
+                )
+                metrics["cv_mean"] = float(cv_scores.mean())
+                metrics["cv_std"] = float(cv_scores.std())
+            except ValueError as e:
+                print(f"  Cross-validation failed for {name}: {e}")
+                metrics["cv_mean"] = metrics["accuracy"]
+                metrics["cv_std"] = 0.0
             
             results[name] = metrics
             self.model_metrics[name] = metrics

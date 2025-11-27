@@ -5,6 +5,7 @@ Utility functions for AQI calculations and data processing.
 from typing import Optional, Dict, Any
 import random
 from datetime import datetime, timedelta
+import pandas as pd
 
 
 def calculate_aqi_category(aqi: int) -> str:
@@ -164,3 +165,84 @@ def validate_aqi_reading(data: Dict[str, Any]) -> Dict[str, Any]:
         data["aqi_category"] = calculate_aqi_category(data["aqi"])
     
     return data
+
+
+def map_csv_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Map common CSV column name variations to the expected format.
+    
+    Handles variations like:
+    - pm2_5, pm2.5, PM2.5 → pm25
+    - AQI_Category, aqi_category → aqi_category
+    - nh3, NH3 → nh3
+    - no, NO → no
+    
+    Args:
+        df: DataFrame with potentially non-standard column names
+        
+    Returns:
+        DataFrame with standardized column names
+    """
+    # Create a copy to avoid modifying the original
+    df = df.copy()
+    
+    # Column mapping dictionary (source variations → target name)
+    column_mapping = {
+        # PM2.5 variations
+        "pm2_5": "pm25",
+        "pm2.5": "pm25",
+        "PM2.5": "pm25",
+        "PM2_5": "pm25",
+        "PM25": "pm25",
+        
+        # PM10 variations
+        "PM10": "pm10",
+        
+        # CO variations
+        "CO": "co",
+        
+        # NO variations
+        "NO": "no",
+        
+        # NO2 variations
+        "NO2": "no2",
+        
+        # O3 variations
+        "O3": "o3",
+        
+        # SO2 variations
+        "SO2": "so2",
+        
+        # NH3 variations
+        "NH3": "nh3",
+        
+        # AQI category variations
+        "AQI_Category": "aqi_category",
+        "AQI_category": "aqi_category",
+        "aqi_Category": "aqi_category",
+        "AQICategory": "aqi_category",
+        "aqicategory": "aqi_category",
+        
+        # AQI variations
+        "AQI": "aqi",
+        
+        # AQI label variations
+        "AQI_Label": "aqi_label",
+        "AQILabel": "aqi_label",
+        "aqi_Label": "aqi_label",
+        "aqilabel": "aqi_label",
+    }
+    
+    # Apply mappings
+    rename_dict = {}
+    for old_name, new_name in column_mapping.items():
+        if old_name in df.columns and new_name not in df.columns:
+            rename_dict[old_name] = new_name
+    
+    if rename_dict:
+        df = df.rename(columns=rename_dict)
+    
+    # Convert all column names to lowercase for consistency
+    df.columns = df.columns.str.lower()
+    
+    return df

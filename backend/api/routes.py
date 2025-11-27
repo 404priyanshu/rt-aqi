@@ -2,12 +2,13 @@
 API Routes for AQI data and predictions.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from typing import List, Optional
 from datetime import datetime, timedelta
 import pandas as pd
+import io
 
 from backend.database.connection import get_db
 from backend.models.aqi_model import AQIReading, ModelMetrics
@@ -16,7 +17,8 @@ from backend.utils.helpers import (
     generate_mock_aqi_data, 
     generate_historical_data,
     calculate_aqi_category,
-    validate_aqi_reading
+    validate_aqi_reading,
+    map_csv_columns
 )
 from pydantic import BaseModel
 
@@ -321,6 +323,93 @@ async def trigger_model_training(
         "message": "Model training started in background",
         "status": "training"
     }
+
+
+@router.post("/models/train-from-csv", summary="Train models from CSV file")
+async def train_from_csv(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Train ML models from an uploaded CSV file.
+    
+    The CSV file should contain pollutant data with columns like:
+    - pm2_5 or pm25 (PM2.5 readings)
+    - pm10 (PM10 readings)
+    - co, no, no2, o3, so2 (other pollutants)
+    - AQI_Category or aqi_category (target labels)
+    
+    Column names are automatically mapped to the expected format.
+    """
+    # Validate file type
+    if not file.filename or not file.filename.endswith('.csv'):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file type. Please upload a CSV file."
+        )
+    
+    try:
+        # Read CSV file
+        contents = await file.read()
+        df = pd.read_csv(io.StringIO(contents.decode('utf-8')))
+        
+        # Apply column name mapping
+        df = map_csv_columns(df)
+        
+        # Validate minimum sample count
+        min_samples = 50
+        if len(df) < min_samples:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Insufficient data. Got {len(df)} samples, "
+                       f"but minimum required is {min_samples}."
+            )
+        
+        # Preprocess and train
+        X, y = ml_pipeline.preprocess_data(df)
+        results = ml_pipeline.train_all_models(X, y)
+        
+        # Save models
+        saved_paths = ml_pipeline.save_models()
+        
+        # Store metrics in database
+        for name, metrics in results.items():
+            db_metrics = ModelMetrics(
+                model_name=name,
+                accuracy=metrics["accuracy"],
+                precision=metrics["precision"],
+                recall=metrics["recall"],
+                f1_score=metrics["f1_score"],
+                roc_auc=metrics.get("roc_auc"),
+                confusion_matrix=metrics["confusion_matrix"],
+                is_best_model=(name == ml_pipeline.best_model_name)
+            )
+            db.add(db_metrics)
+        
+        db.commit()
+        
+        return {
+            "message": "Training completed successfully",
+            "samples_used": len(df),
+            "best_model": ml_pipeline.best_model_name,
+            "results": results,
+            "models_saved": list(saved_paths.keys())
+        }
+        
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except pd.errors.EmptyDataError:
+        raise HTTPException(
+            status_code=400,
+            detail="The uploaded CSV file is empty."
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Training failed: {str(e)}"
+        )
 
 
 # ==================== Export Endpoints ====================
